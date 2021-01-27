@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0-beta1/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-giJF6kkoqNQ00vy+HMDP7azOuL0xtbfIcaT9wjKHr8RbDVddVHyTfAAsrekwKmP1" crossorigin="anonymous">
+    <title>ToDo List</title>
+</head>
+<body>
+    <script>
+
+        function renderTask({id, title, created, datetime_due, description, updated, datetime_completed}) {
+            return (
+                `<div class="task-container" data-id=${id}>
+                    <div class="task-header">
+                        <span>${title}</span>
+                        <span>${datetime_completed ? "completed" : "in progress"}</span>
+                        <span>created at ${created}</span>
+                        <span>due at ${datetime_due}</span>
+                    </div>
+                    <div class="task-description">
+                        ${description}
+                    </div>
+                    <a href="#" onclick="deleteTask(this.closest('.task-container'))">delete task</a>
+                </div>`
+            )
+        }
+
+        async function makeRequest(url, data) {
+            let method = url === '/get-tasks' ? 'get' : 'post';
+            try {
+                let response = await fetch(url, {
+                    method: method,
+                    body: data
+                }, false);
+                let responseData = await response.json();
+                return responseData;
+            } catch(error) {
+                console.log(error);
+            }
+        }
+
+        function populateTasks(data) {
+            let tasks = data.map(task => renderTask(task)).join('\n');
+            listElem.innerHTML = tasks;
+        }
+
+        async function deleteTask(taskContainer) {
+            data = await makeRequest('/delete-task', taskContainer.dataset.id);
+            data ? taskContainer.parentNode.removeChild(taskContainer) : false;
+        }
+
+        async function addTask(form) {
+            event.preventDefault();
+            form = new FormData(form);
+            data = await makeRequest('/add-task', form);
+            if (!data.hasOwnProperty("errors")) {
+                listElem.innerHTML = renderTask(data[0]) + listElem.innerHTML;
+                document.getElementById('task-form').replaceWith(cleanForm.cloneNode(true));
+            } else {
+                showValidation(data.errors)
+            }
+        }
+
+        function showValidation(errors) {
+            for (let field of Object.keys(errors)) {
+                let errorField = document.getElementById(`${field}-validation`);
+                document.getElementById(`${field}`).classList.add('is-invalid');
+                errorField.classList.add('invalid-feedback')
+                for (let error of errors[field]) {
+                    errorField.append(`${error}\n`)
+                }
+            }
+        }
+        
+    </script>
+    <form action="#" onsubmit="addTask(this);" id='task-form' method="POST" novalidate>
+        {% for field in form %}
+            {% if not (field.label.text == 'CSRF Token' or field.label.text == 'Submit') %}
+                <div class="mb-3">
+                    {{ field.label(class_='form-label') }}
+                    {{ field(class_='form-control', aria_describedby='{}-validation'.format(field.name)) }}
+                    <div id="{{'{}-validation'.format(field.name)}}"></div>
+                </div>
+            {% else %}
+                {{ field(class_='btn btn-primary' if field.name == 'submit') }}
+            {% endif %}
+        {% endfor %}
+    </form>
+    <h2>Tasks:</h2>
+    <div id="task-list-container">
+    </div>
+    <script>
+        let listElem = document.getElementById('task-list-container')
+        async function fillTasks() {
+            let data = await makeRequest('/get-tasks');
+            populateTasks(data);
+        }
+        fillTasks();
+        let cleanForm = document.getElementById('task-form').cloneNode(true)
+    </script>
+</body>
+</html>
