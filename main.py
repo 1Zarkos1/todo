@@ -2,19 +2,20 @@ from datetime import datetime
 from flask import Flask, render_template, request, jsonify, redirect
 from flask_sqlalchemy import SQLAlchemy
 from flask_wtf import FlaskForm
-from wtforms import StringField, TextField, SubmitField, TextAreaField
+from wtforms import StringField, TextField, SubmitField, TextAreaField, HiddenField
 from wtforms.validators import Required
 from wtforms.fields.html5 import DateTimeLocalField
 
-app = Flask(__name__, template_folder='.')
+app = Flask(__name__, template_folder='', static_folder='')
 app.config.from_pyfile('config.py')
 db = SQLAlchemy(app)
 
 class TaskForm(FlaskForm):
+    id = HiddenField('task-id')
     title = StringField('Task', validators=[Required()])
     datetime_due = DateTimeLocalField('Due date', format="%Y-%m-%dT%H:%M")
     description = TextAreaField('Description')
-    submit = SubmitField('Submit')
+    submit = SubmitField('Create')
 
 class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -48,9 +49,22 @@ def add_task():
     task = Task()
     if form.validate_on_submit():
         form.populate_obj(task)
+        del task.id
         db.session.add(task)
         db.session.commit()
         db.session.refresh(task)
+        return tasks_to_json([task])
+    return {'errors': form.errors}
+
+@app.route('/edit-task', methods=['POST'])
+def edit_task():
+    form = TaskForm()
+    task = Task()
+    if form.validate_on_submit():
+        existing = Task.query.get(int(task.id))
+        task.id = int(task.id)
+        db.session.commit()
+        task = Task.query.get(int(task.id))
         return tasks_to_json([task])
     return {'errors': form.errors}
 
