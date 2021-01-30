@@ -9,20 +9,28 @@
 <body>
     <script src="{{url_for('static', filename='index.js')}}"></script>
     <div class="container">
-        <form action="#" onsubmit="addTask(this);" id='task-form' method="POST" novalidate>
-            {% for field in form %}
-                {% if not (field.label.text in ('CSRF Token', 'Create', 'task-id')) %}
-                    <div class="mb-3">
-                        {{ field.label(class_='form-label') }}
-                        {{ field(class_='form-control', aria_describedby='{}-validation'.format(field.name)) }}
-                        <div id="{{'{}-validation'.format(field.name)}}"></div>
-                    </div>
-                {% else %}
-                    {{ field(class_='btn btn-primary' if field.name == 'submit') }}
-                {% endif %}
-            {% endfor %}
-            <input type="reset" value="Clear" class="btn btn-primary">
-            <input type="button" value="Reset" class="btn btn-primary" onclick="resetForm();">
+        <form action="/add-task" onsubmit="addTask(this);" id='task-form' method="POST" novalidate>
+            <fieldset class="form-group">
+                <legend>Add task</legend>
+                {% for field in form %}
+                    {% if not (field.label.text in ('CSRF Token', 'Create', 'task-id')) %}
+                        <div class="mb-3">
+                            {{ field.label(class_='form-label') }}
+                            {{ field(class_='form-control', aria_describedby='{}-validation'.format(field.name)) }}
+                            <div id="{{'{}-validation'.format(field.name)}}"></div>
+                        </div>
+                    {% else %}
+                        {{ field() }}
+                    {% endif %}
+                {% endfor %}
+                <div class="mb-3">
+                    <label for="color">Task color</label>
+                    <input type="color" name="color" id="color" class="">
+                </div>
+                <input type="submit" value="Create" class="btn btn-primary">
+                <input type="reset" value="Clear" class="btn btn-primary">
+                <input type="button" value="Reset" class="btn btn-primary" onclick="resetForm();">
+            </fieldset>
         </form>
         <h2>Tasks:</h2>
         <div id="task-list-container">

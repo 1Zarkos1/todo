@@ -6,14 +6,26 @@ function renderTask({
   description,
   updated,
   datetime_completed,
+  color,
 }) {
-  return `<div id="task-${id}" class="task-container" data-id=${id}>
+  console.log(datetime_completed);
+  return `<div id="task-${id}" class="task-container" data-id=${id} style="${
+    color ? `border: 2px solid ${color}` : ""
+  }">
             <div class="task-header">
+                <span class='completion'>
+                  <input type="checkbox" id="check" onclick="toggleTaskCompletion(this)" ${
+                    datetime_completed ? "checked" : ""
+                  }>
+                </span>
                 <span class='title'>${title}</span>
-                <span>${datetime_completed ? "completed" : "in progress"}</span>
+                <span class="completion-date">${
+                  datetime_completed ? "completed" : "in progress"
+                }</span>
                 <span>created at ${created}</span>
                 <span>due at <span class="datetime-due">${datetime_due}</span></span>
             </div>
+            <div>updated at ${updated}</div>
             <div class="description">
                 ${description}
             </div>
@@ -41,6 +53,20 @@ async function makeRequest(url, data) {
   }
 }
 
+async function toggleTaskCompletion(checkbox) {
+  let taskContainer = checkbox.closest(".task-container");
+  respData = await makeRequest(
+    "/toggle-task-completion",
+    taskContainer.dataset.id
+  );
+  if (respData && respData.hasOwnProperty("error")) {
+    checkbox.checked = !checkbox.checked;
+  } else {
+    let state = respData ? "completed" : "in progress";
+    taskContainer.querySelector(".completion-date").innerHTML = state;
+  }
+}
+
 function populateTasks(data) {
   let tasks = data.map((task) => renderTask(task)).join("\n");
   listElem.innerHTML = tasks;
@@ -59,6 +85,7 @@ function insertFormWithEditedData(editedTask) {
     .querySelector(".description")
     .innerHTML.trim();
   newForm.submit.value = "Edit";
+  newForm.getElementsByTagName("legend")[0].innerHTML = "Edit task";
   document.getElementById("task-form").replaceWith(newForm);
 }
 
@@ -66,7 +93,6 @@ async function editTask(form) {
   event.preventDefault();
   data = await makeRequest("/edit-task", new FormData(form));
   if (!data.hasOwnProperty("errors")) {
-    data = data[0];
     let replaced = document.getElementById(`task-${data.id}`);
     let newTask = new DOMParser()
       .parseFromString(renderTask(data), "text/html")
@@ -85,8 +111,9 @@ async function addTask(form) {
   event.preventDefault();
   form = new FormData(form);
   data = await makeRequest("/add-task", form);
+  console.log(data);
   if (!data.hasOwnProperty("errors")) {
-    listElem.innerHTML = renderTask(data[0]) + listElem.innerHTML;
+    listElem.innerHTML = renderTask(data) + listElem.innerHTML;
     document.getElementById("task-form").replaceWith(cleanForm.cloneNode(true));
   } else {
     showValidation(data.errors);
