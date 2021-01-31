@@ -7,6 +7,7 @@ function renderTask({
   updated,
   datetime_completed,
   color,
+  comments,
 }) {
   console.log(datetime_completed);
   return `<div id="task-${id}" class="task-container" data-id=${id} style="${
@@ -30,8 +31,22 @@ function renderTask({
                 ${description}
             </div>
             <a href="#" onclick="deleteTask(this.closest('.task-container'))">delete task</a>
-            <a href="#" onclick="insertFormWithEditedData(this.closest('.task-container'))">edit task</a>
-        </div>`;
+            <a href="#" onclick="insertFormWithEditingData(this.closest('.task-container'))">edit task</a>
+            <div class="comment-list">
+                ${comments
+                  .map((comment) => {
+                    return `<div class="comment-container" data-comment-id=${comment.id}>
+                    <div class="comment-text">
+                      ${comment.text}
+                    </div>
+                    <a href="#" className="" onclick="deleteComment(this.parentNode);">
+                      delete
+                    </a>
+                    </div>`;
+                  })
+                  .join("")}
+            </div>
+          </div>`;
 }
 
 async function makeRequest(url, data) {
@@ -53,6 +68,14 @@ async function makeRequest(url, data) {
   }
 }
 
+async function deleteComment(commentContainer) {
+  data = await makeRequest(
+    "/delete-comment",
+    commentContainer.dataset.commentId
+  );
+  data ? commentContainer.parentNode.removeChild(commentContainer) : false;
+}
+
 async function toggleTaskCompletion(checkbox) {
   let taskContainer = checkbox.closest(".task-container");
   respData = await makeRequest(
@@ -72,7 +95,7 @@ function populateTasks(data) {
   listElem.innerHTML = tasks;
 }
 
-function insertFormWithEditedData(editedTask) {
+function insertFormWithEditingData(editedTask) {
   let newForm = cleanForm.cloneNode(true);
   newForm.setAttribute("onsubmit", "editTask(this)");
   newForm.id.value = editedTask.dataset.id;
@@ -87,6 +110,16 @@ function insertFormWithEditedData(editedTask) {
   newForm.submit.value = "Edit";
   newForm.getElementsByTagName("legend")[0].innerHTML = "Edit task";
   document.getElementById("task-form").replaceWith(newForm);
+  let comments = editedTask.querySelectorAll(
+    ".comment-list .comment-container"
+  );
+  console.log(comments);
+  for (let comment of comments) {
+    let id = comment.dataset.commentId;
+    console.log(id);
+    let text = comment.querySelector(".comment-text").textContent.trim();
+    addCommentField(text, id);
+  }
 }
 
 async function editTask(form) {
@@ -111,8 +144,8 @@ async function addTask(form) {
   event.preventDefault();
   form = new FormData(form);
   data = await makeRequest("/add-task", form);
-  console.log(data);
   if (!data.hasOwnProperty("errors")) {
+    console.log(data);
     listElem.innerHTML = renderTask(data) + listElem.innerHTML;
     document.getElementById("task-form").replaceWith(cleanForm.cloneNode(true));
   } else {
@@ -139,4 +172,64 @@ function resetForm() {
 async function fillTasks() {
   let data = await makeRequest("/get-tasks");
   populateTasks(data);
+}
+function addCommentField(value = "", id) {
+  event.preventDefault();
+  let form = document.getElementById("task-form");
+  let commentNumber = 1;
+  while (form.querySelector(`div#comment-group-${commentNumber}`)) {
+    commentNumber += 1;
+  }
+  let div = document.createElement("div");
+  div.setAttribute("class", "mb-3");
+  div.setAttribute("id", `comment-group-${commentNumber}`);
+  if (id) {
+    let hidden = document.createElement("input");
+    hidden.setAttribute("type", "hidden");
+    hidden.setAttribute("name", `hidden-${commentNumber}`);
+    hidden.value = id;
+    div.append(hidden);
+  }
+  let label = document.createElement("label");
+  label.innerHTML = `Comment №${commentNumber}`;
+  label.setAttribute("for", `comment-${commentNumber}`);
+  let deleteBtn = document.createElement("a");
+  deleteBtn.textContent = "delete";
+  deleteBtn.addEventListener("click", () => deleteCommentField(div));
+  deleteBtn.setAttribute("href", "#");
+  let comment = document.createElement("input");
+  comment.setAttribute("type", "text");
+  comment.setAttribute("id", `comment-${commentNumber}`);
+  comment.setAttribute("name", `comment-${commentNumber}`);
+  comment.value = value;
+  comment.setAttribute("class", "form-control");
+  div.append(label);
+  div.append(deleteBtn);
+  div.append(comment);
+  form.querySelector("fieldset.form-group").append(div);
+}
+
+function deleteCommentField(commentFieldGroup) {
+  event.preventDefault();
+  let id = +commentFieldGroup.id.split("-")[2];
+  let parent = commentFieldGroup.parentNode;
+  parent.removeChild(commentFieldGroup);
+  reiterateFields(parent, id);
+}
+
+function reiterateFields(container, id) {
+  console.log("some");
+  let fields = container.querySelectorAll(`div[id*=comment-group]`);
+  for (field of fields) {
+    let fieldId = field.id.split("-")[2];
+    if (fieldId >= id) {
+      field.id = `comment-group-${id}`;
+      field.querySelector("label").innerHTML = `Comment №${id}`;
+      let hidden = field.querySelector(`input[type=hidden]`);
+      hidden !== null ? (hidden.name = `hidden-${id}`) : false;
+      field.querySelector("input[type=text]").id = `comment-${id}`;
+      field.querySelector("input[type=text]").name = `comment-${id}`;
+      id += 1;
+    }
+  }
 }

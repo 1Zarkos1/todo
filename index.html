@@ -25,12 +25,16 @@
                 {% endfor %}
                 <div class="mb-3">
                     <label for="color">Task color</label>
-                    <input type="color" name="color" id="color" class="">
+                    <input type="color" name="color" id="color" class="" value="#ffffff">
                 </div>
-                <input type="submit" value="Create" class="btn btn-primary">
-                <input type="reset" value="Clear" class="btn btn-primary">
-                <input type="button" value="Reset" class="btn btn-primary" onclick="resetForm();">
+                <div class="mb-3">
+                    <label for="comments">Comments:</label>
+                    <a href="#" id="comments-addition" onclick="addCommentField();">add</a>
+                </div>
             </fieldset>
+            <input type="submit" id="submit" value="Create" class="btn btn-primary">
+            <input type="reset" value="Clear" class="btn btn-primary">
+            <input type="button" value="Reset" class="btn btn-primary" onclick="resetForm();">
         </form>
         <h2>Tasks:</h2>
         <div id="task-list-container">

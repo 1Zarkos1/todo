@@ -32,11 +32,32 @@ class Task(db.Model):
     color = db.Column(db.String)
     updated = db.Column(db.DateTime, onupdate=datetime.utcnow)
 
+    comments = db.relationship(
+        'Comment', backref='task', lazy='selectin',
+        cascade='all, delete, delete-orphan'
+    )
+
+class Comment(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    task_id = db.Column(db.Integer, db.ForeignKey('task.id'))
+    text = db.Column(db.String, nullable=False)
+    created = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class TaskSchema(ma.SQLAlchemyAutoSchema):
     class Meta:
         model = Task
+        include_fk = True
+    
+    comments = ma.Nested('CommentSchema', many=True)
+
+class CommentSchema(ma.SQLAlchemyAutoSchema):
+    class Meta:
+        model = Comment
+        # exclude = ('author',)
 
 task_schema = TaskSchema()
+comment_schema = CommentSchema()
 
 @app.route('/')
 def main():
@@ -53,6 +74,7 @@ def add_task():
         del task.id
         task.color = request.form['color']
         db.session.add(task)
+        task = process_comments(request.form, task)
         db.session.commit()
         db.session.refresh(task)
         return task_schema.jsonify(task)
@@ -67,6 +89,7 @@ def edit_task():
         form.populate_obj(task)
         task.id = id
         task.color = request.form['color']
+        task = process_comments(request.form, task, "edit")
         db.session.commit()
         task = Task.query.get(id)
         return task_schema.jsonify(task)
@@ -90,3 +113,23 @@ def toggle_task():
     task.datetime_completed = state
     db.session.commit()
     return jsonify(state.isoformat() if state else None)
+
+@app.route('/delete-comment', methods=['POST'])
+def delete_comment():
+    id = request.data.decode('utf-8')
+    db.session.query(Comment).filter(Comment.id == int(id)).delete()
+    db.session.commit()
+    return {'success': True}
+
+def process_comments(form, task, action='add'):
+    comment_id = 1
+    while comment := form.get(f'comment-{comment_id}', "").strip():
+        if action == 'add' or not form.get(f'hidden-{comment_id}'):
+            db.session.add(Comment(text=comment, task=task))
+        else:
+            edited_comment_id = int(form.get(f'hidden-{comment_id}'))
+            db.session.merge(Comment(id=edited_comment_id, text=comment, task_id=task.id))
+        comment_id += 1
+    [db.session.delete(comment) for comment in task.comments 
+        if comment not in db.session.dirty and comment not in db.session.new]
+    return task
