@@ -9,43 +9,81 @@ function renderTask({
   color,
   comments,
 }) {
-  console.log(datetime_completed);
+  console.log(`"${datetime_due}"`);
+  console.log(updated);
   return `<div id="task-${id}" class="task-container" data-id=${id} style="${
     color ? `border: 2px solid ${color}` : ""
   }">
-            <div class="task-header">
-                <span class='completion'>
-                  <input type="checkbox" id="check" onclick="toggleTaskCompletion(this)" ${
-                    datetime_completed ? "checked" : ""
-                  }>
-                </span>
-                <span class='title'>${title}</span>
-                <span class="completion-date">${
-                  datetime_completed ? "completed" : "in progress"
-                }</span>
-                <span>created at ${created}</span>
-                <span>due at <span class="datetime-due">${datetime_due}</span></span>
+            <div class="task-main">
+              <div class='task-completion'>
+                <input type="checkbox" class="regular-checkbox" id="check" onclick="toggleTaskCompletion(this)" ${
+                  datetime_completed ? "checked" : ""
+                }>
+              </div>
+              <div class="task-body">
+                <div class="task-header">
+                    <span class='title'>${title}</span>
+                    <span class="status-date" title="${
+                      datetime_completed || ""
+                    }">${
+    datetime_completed
+      ? `(completed - ${moment(datetime_completed).format("LLL")})`
+      : ""
+  }</span>
+                </div>
+                    <span class="status-date sm-mg" >created - ${moment(
+                      created
+                    ).format("LLL")}</span> | 
+                    <span class="status-date sm-mg" title='${moment(
+                      datetime_due
+                    ).format(
+                      "LLL"
+                    )}' data-date="${datetime_due}">due <span class="datetime-due">${moment(
+    datetime_due
+  ).fromNow()}</span></span>
+                ${
+                  updated
+                    ? `<div class="status-date sm-mg">updated - ${moment(
+                        updated
+                      ).format("LLL")}</div>`
+                    : ""
+                }
+                <div class="description">
+                    ${description}
+                </div>
             </div>
-            <div>updated at ${updated}</div>
-            <div class="description">
-                ${description}
+              <div class="task-buttons">
+                <i class="bi-pencil-square text-button-icon" onclick="insertFormWithEditingData(this.closest('.task-container'))"></i>
+                <i class="bi-x text-button-icon" onclick="deleteTask(this.closest('.task-container'))" style="color: red;"></i>
+                ${
+                  comments.length === 0
+                    ? ""
+                    : `<div class="comments-toggle">
+                    <i class="bi-chat-square-text text-button-icon" onclick="toggleCommentSection(this)"></i>
+                    <sup>(${comments.length})<sup>
+                    </div>`
+                }
+              </div>
             </div>
-            <a href="#" onclick="deleteTask(this.closest('.task-container'))">delete task</a>
-            <a href="#" onclick="insertFormWithEditingData(this.closest('.task-container'))">edit task</a>
-            <div class="comment-list">
-                ${comments
-                  .map((comment) => {
-                    return `<div class="comment-container" data-comment-id=${comment.id}>
-                    <div class="comment-text">
-                      ${comment.text}
-                    </div>
-                    <a href="#" className="" onclick="deleteComment(this.parentNode);">
-                      delete
-                    </a>
-                    </div>`;
-                  })
-                  .join("")}
-            </div>
+            ${
+              comments.length === 0
+                ? ""
+                : `<div class="comments-container" style="display: None;">
+                <div class="comment-list">
+                  ${comments
+                    .map((comment) => {
+                      return `<div class="comment-container" data-comment-id=${comment.id}>
+                      <div class="comment-text">
+                        ${comment.text}
+                      </div>
+                      <i class="bi-pencil-square text-button-icon" onclick="editComment(this);"></i>
+                      <i class="bi-x text-button-icon" onclick="deleteComment(this.parentNode);" style="color: red;"></i>
+                      </div>`;
+                    })
+                    .join("")}
+              </div>
+              </div>`
+            }
           </div>`;
 }
 
@@ -85,8 +123,8 @@ async function toggleTaskCompletion(checkbox) {
   if (respData && respData.hasOwnProperty("error")) {
     checkbox.checked = !checkbox.checked;
   } else {
-    let state = respData ? "completed" : "in progress";
-    taskContainer.querySelector(".completion-date").innerHTML = state;
+    let state = respData ? "(completed)" : "";
+    taskContainer.querySelector(".title + .status-date").innerHTML = state;
   }
 }
 
@@ -99,9 +137,7 @@ function insertFormWithEditingData(editedTask) {
   let newForm = cleanForm.cloneNode(true);
   newForm.setAttribute("onsubmit", "editTask(this)");
   newForm.id.value = editedTask.dataset.id;
-  let date = new Date(editedTask.querySelector(".datetime-due").innerHTML)
-    .toISOString()
-    .slice(0, -8);
+  let date = editedTask.querySelector(".datetime-due").parentNode.dataset.date;
   newForm.title.value = editedTask.querySelector(".title").innerHTML;
   newForm.datetime_due.value = date;
   newForm.description.value = editedTask
@@ -114,6 +150,7 @@ function insertFormWithEditingData(editedTask) {
     ".comment-list .comment-container"
   );
   console.log(comments);
+  newForm.color.value = rgbToHex(editedTask.style.borderColor);
   for (let comment of comments) {
     let id = comment.dataset.commentId;
     console.log(id);
@@ -174,7 +211,7 @@ async function fillTasks() {
   populateTasks(data);
 }
 function addCommentField(value = "", id) {
-  event.preventDefault();
+  // event.preventDefault();
   let form = document.getElementById("task-form");
   let commentNumber = 1;
   while (form.querySelector(`div#comment-group-${commentNumber}`)) {
@@ -232,4 +269,68 @@ function reiterateFields(container, id) {
       id += 1;
     }
   }
+}
+
+function toggleCommentSection(toggleBtn) {
+  let commentSection = toggleBtn
+    .closest(".task-container")
+    .querySelector(".comments-container");
+  console.log(commentSection.style.display);
+  if (commentSection.style.display === "none") {
+    commentSection.style.display = "";
+  } else {
+    commentSection.style.display = "None";
+  }
+}
+
+function rgbToHex(rgbString) {
+  return (
+    "#" +
+    rgbString
+      .slice(4, rgbString.length - 1)
+      .split(", ")
+      .map((number) => {
+        let hex = Number.parseInt(number).toString(16);
+        return hex.length === 2 ? hex : "0" + hex;
+      })
+      .join("")
+  );
+}
+
+async function editComment(elem) {
+  event.preventDefault();
+  let input = elem.parentNode.querySelector("input");
+  if (input) {
+    resp = await makeRequest(
+      "/edit-comment",
+      JSON.stringify({
+        id: elem.parentNode.dataset.commentId,
+        value: input.value,
+      })
+    );
+    if (resp.success) {
+      let div = elem.parentNode.querySelector(".comment-text");
+      div.textContent = input.value;
+      div.style = "";
+      input.remove();
+    }
+  } else {
+    let comment = elem.parentNode.querySelector(".comment-text");
+    comment.style.display = "None";
+    input = document.createElement("input");
+    input.setAttribute("type", "text");
+    input.setAttribute("class", "form-control");
+    let cancel = document.createElement("button");
+    cancel.textContent = "cancel";
+    cancel.setAttribute("onclick", "cancelCommentEditing(this);");
+    input.value = comment.textContent.trim();
+    elem.parentNode.insertBefore(input, elem);
+    elem.parentNode.insertBefore(cancel, elem.nextSibling);
+  }
+}
+
+function cancelCommentEditing(elem) {
+  elem.closest(".comment-container").querySelector("input").remove();
+  elem.closest(".comment-container").querySelector(".comment-text").style = "";
+  elem.remove();
 }

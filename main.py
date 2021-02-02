@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, redirect, escape
+from flask import Flask, render_template, request, jsonify, redirect, escape, json
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from flask_wtf import FlaskForm
@@ -121,15 +121,24 @@ def delete_comment():
     db.session.commit()
     return {'success': True}
 
+@app.route('/edit-comment', methods=['POST'])
+def edit_comment():
+    data = json.loads(request.data.decode('utf-8'))
+    db.session.query(Comment).filter(Comment.id == int(data['id'])).update({Comment.text: data['value']})
+    db.session.commit()
+    return {'success': True}
+
 def process_comments(form, task, action='add'):
     comment_id = 1
+    sent_ids = set()
     while comment := form.get(f'comment-{comment_id}', "").strip():
         if action == 'add' or not form.get(f'hidden-{comment_id}'):
             db.session.add(Comment(text=comment, task=task))
         else:
             edited_comment_id = int(form.get(f'hidden-{comment_id}'))
             db.session.merge(Comment(id=edited_comment_id, text=comment, task_id=task.id))
+            sent_ids.add(edited_comment_id)
         comment_id += 1
     [db.session.delete(comment) for comment in task.comments 
-        if comment not in db.session.dirty and comment not in db.session.new]
+        if comment.id not in sent_ids and comment.id is not None]
     return task
