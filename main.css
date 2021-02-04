@@ -22,6 +22,7 @@ body {
 
 .task-body {
   flex-grow: 1.5;
+  align-self: flex-start;
 }
 
 .task-completion {
@@ -54,10 +55,50 @@ body {
 .task-buttons {
   display: flex;
   flex-direction: column;
-  margin: 0.5rem 1.5rem;
+  margin: 0.5rem 1rem;
 }
 
 .text-button-icon {
   cursor: pointer;
   font-size: 1.5rem;
+}
+
+.comment-list {
+  margin: 0rem 1rem 0rem 1.5rem;
+}
+
+.comment-container {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.comment-body {
+  flex-grow: 1;
+  border-bottom: 1px solid #5f5f5f;
+  margin-bottom: 0.5rem;
+}
+
+.comment-buttons .text-button-icon {
+  font-size: 1.2rem;
+}
+
+.comment-buttons .text-button-icon:last-of-type {
+  margin-left: 0.3rem;
+}
+
+.comment-buttons {
+  align-self: center;
+  margin-left: 0.5rem;
+}
+
+.sm-icon {
+  font-size: 1.2rem;
+}
+
+.completed {
+  background-color: #5af73249;
+}
+
+.failed {
+  background-color: #fd5b5b49;
 }

@@ -1,5 +1,5 @@
 from datetime import datetime
-from flask import Flask, render_template, request, jsonify, redirect, escape, json
+from flask import Flask, render_template, request, jsonify, redirect, escape, json, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from flask_wtf import FlaskForm
@@ -14,12 +14,15 @@ db = SQLAlchemy(app)
 ma = Marshmallow(app)
 migrate = Migrate(app, db)
 
+def escape_filter(input_value):
+    return escape(input_value) if input_value is not None else ""
+
 
 class TaskForm(FlaskForm):
     id = HiddenField('task-id')
-    title = StringField('Task', validators=[Required()])
+    title = StringField('Task', validators=[Required()], filters=(escape_filter,))
     datetime_due = DateTimeLocalField('Due date', format="%Y-%m-%dT%H:%M")
-    description = TextAreaField('Description')
+    description = TextAreaField('Description', filters=(escape_filter,))
     # submit = SubmitField('Create')
 
 class Task(db.Model):

@@ -11,14 +11,22 @@ function renderTask({
 }) {
   console.log(`"${datetime_due}"`);
   console.log(updated);
-  return `<div id="task-${id}" class="task-container" data-id=${id} style="${
+  let completed = "";
+  if (datetime_completed) {
+    completed = "completed";
+  } else {
+    if (new Date() > new Date(datetime_due)) {
+      completed = "failed";
+    }
+  }
+  return `<div id="task-${id}" class="task-container ${completed}" data-id=${id} style="${
     color ? `border: 2px solid ${color}` : ""
   }">
             <div class="task-main">
               <div class='task-completion'>
                 <input type="checkbox" class="regular-checkbox" id="check" onclick="toggleTaskCompletion(this)" ${
                   datetime_completed ? "checked" : ""
-                }>
+                } ${completed === "failed" ? "disabled" : ""}>
               </div>
               <div class="task-body">
                 <div class="task-header">
@@ -60,7 +68,6 @@ function renderTask({
                     ? ""
                     : `<div class="comments-toggle">
                     <i class="bi-chat-square-text text-button-icon" onclick="toggleCommentSection(this)"></i>
-                    <sup>(${comments.length})<sup>
                     </div>`
                 }
               </div>
@@ -68,21 +75,30 @@ function renderTask({
             ${
               comments.length === 0
                 ? ""
-                : `<div class="comments-container" style="display: None;">
-                <div class="comment-list">
+                : `
+                <div class="comment-list" style="display: None;">
                   ${comments
                     .map((comment) => {
-                      return `<div class="comment-container" data-comment-id=${comment.id}>
-                      <div class="comment-text">
-                        ${comment.text}
+                      return `<div class="comment-container" data-comment-id=${
+                        comment.id
+                      }>
+                      <div class="comment-body">
+                        <span class="comment-header status-date sm-mg">${moment(
+                          comment.created
+                        ).format("LLL")}</span>
+                        <div class="comment-text">
+                          ${comment.text}
+                        </div>
                       </div>
-                      <i class="bi-pencil-square text-button-icon" onclick="editComment(this);"></i>
-                      <i class="bi-x text-button-icon" onclick="deleteComment(this.parentNode);" style="color: red;"></i>
+                      <div class="comment-buttons">
+                        <i class="bi-pencil-square text-button-icon" onclick="editComment(this);"></i>
+                        <i class="bi-x text-button-icon" onclick="deleteComment(this.closest('.comment-container'));" style="color: red;"></i>
+                      </div>
                       </div>`;
                     })
                     .join("")}
               </div>
-              </div>`
+              `
             }
           </div>`;
 }
@@ -107,6 +123,7 @@ async function makeRequest(url, data) {
 }
 
 async function deleteComment(commentContainer) {
+  console.log(commentContainer.dataset.commentId);
   data = await makeRequest(
     "/delete-comment",
     commentContainer.dataset.commentId
@@ -123,7 +140,10 @@ async function toggleTaskCompletion(checkbox) {
   if (respData && respData.hasOwnProperty("error")) {
     checkbox.checked = !checkbox.checked;
   } else {
-    let state = respData ? "(completed)" : "";
+    let state = respData
+      ? `(completed - ${moment(respData).format("LLL")})`
+      : "";
+    checkbox.closest(".task-container").classList.toggle("completed");
     taskContainer.querySelector(".title + .status-date").innerHTML = state;
   }
 }
@@ -138,11 +158,11 @@ function insertFormWithEditingData(editedTask) {
   newForm.setAttribute("onsubmit", "editTask(this)");
   newForm.id.value = editedTask.dataset.id;
   let date = editedTask.querySelector(".datetime-due").parentNode.dataset.date;
-  newForm.title.value = editedTask.querySelector(".title").innerHTML;
-  newForm.datetime_due.value = date;
-  newForm.description.value = editedTask
-    .querySelector(".description")
-    .innerHTML.trim();
+  newForm.title.value = unescape(editedTask.querySelector(".title").innerHTML);
+  newForm.datetime_due.value = date.slice(0, date.length - 3);
+  newForm.description.value = unescape(
+    editedTask.querySelector(".description").innerHTML.trim()
+  );
   newForm.submit.value = "Edit";
   newForm.getElementsByTagName("legend")[0].innerHTML = "Edit task";
   document.getElementById("task-form").replaceWith(newForm);
@@ -230,10 +250,10 @@ function addCommentField(value = "", id) {
   let label = document.createElement("label");
   label.innerHTML = `Comment №${commentNumber}`;
   label.setAttribute("for", `comment-${commentNumber}`);
-  let deleteBtn = document.createElement("a");
-  deleteBtn.textContent = "delete";
-  deleteBtn.addEventListener("click", () => deleteCommentField(div));
-  deleteBtn.setAttribute("href", "#");
+  let deleteBtn = document.createElement("i");
+  deleteBtn.setAttribute("onclick", "deleteCommentField(this.parentNode)");
+  deleteBtn.classList.add("bi-x", "text-button-icon", "sm-icon");
+  deleteBtn.style.color = "red";
   let comment = document.createElement("input");
   comment.setAttribute("type", "text");
   comment.setAttribute("id", `comment-${commentNumber}`);
@@ -274,7 +294,7 @@ function reiterateFields(container, id) {
 function toggleCommentSection(toggleBtn) {
   let commentSection = toggleBtn
     .closest(".task-container")
-    .querySelector(".comments-container");
+    .querySelector(".comment-list");
   console.log(commentSection.style.display);
   if (commentSection.style.display === "none") {
     commentSection.style.display = "";
@@ -299,32 +319,47 @@ function rgbToHex(rgbString) {
 
 async function editComment(elem) {
   event.preventDefault();
-  let input = elem.parentNode.querySelector("input");
+  let commentContainer = elem.closest(".comment-container");
+  let input = commentContainer.querySelector("input");
   if (input) {
     resp = await makeRequest(
       "/edit-comment",
       JSON.stringify({
-        id: elem.parentNode.dataset.commentId,
+        id: commentContainer.dataset.commentId,
         value: input.value,
       })
     );
     if (resp.success) {
-      let div = elem.parentNode.querySelector(".comment-text");
+      let div = commentContainer.querySelector(".comment-text");
       div.textContent = input.value;
       div.style = "";
+      elem.classList.remove("bi-check2-square");
+      elem.classList.add("bi-pencil-square");
+      let delBtn = elem.parentNode.querySelector("i ~ i");
+      delBtn.classList.remove("bi-arrow-return-left");
+      delBtn.classList.add("bi-x");
+      delBtn.setAttribute("onclick", "cancelCommentEditing(this);");
       input.remove();
     }
   } else {
-    let comment = elem.parentNode.querySelector(".comment-text");
+    let comment = elem
+      .closest(".comment-container")
+      .querySelector(".comment-text");
     comment.style.display = "None";
     input = document.createElement("input");
     input.setAttribute("type", "text");
     input.setAttribute("class", "form-control");
-    let cancel = document.createElement("button");
-    cancel.textContent = "cancel";
-    cancel.setAttribute("onclick", "cancelCommentEditing(this);");
+    comment.parentNode.insertBefore(input, comment);
+    elem.classList.remove("bi-pencil-square");
+    elem.classList.add("bi-check2-square");
+    let cancel = elem.parentNode.querySelector("i ~ i");
+    cancel.classList.remove("bi-x");
+    cancel.classList.add("bi-arrow-return-left");
+    cancel.setAttribute(
+      "onclick",
+      "deleteComment(this.closest('.comment-container'));"
+    );
     input.value = comment.textContent.trim();
-    elem.parentNode.insertBefore(input, elem);
     elem.parentNode.insertBefore(cancel, elem.nextSibling);
   }
 }
@@ -332,5 +367,13 @@ async function editComment(elem) {
 function cancelCommentEditing(elem) {
   elem.closest(".comment-container").querySelector("input").remove();
   elem.closest(".comment-container").querySelector(".comment-text").style = "";
-  elem.remove();
+  elem.classList.remove("bi-arrow-return-left");
+  elem.classList.add("bi-x");
+  let edit = elem.parentNode.querySelector("i");
+  edit.classList.remove("bi-check2-square");
+  edit.classList.add("bi-pencil-square");
+  elem.setAttribute(
+    "onclick",
+    "deleteComment(this.closest('.comment-container'));"
+  );
 }
