@@ -77,80 +77,143 @@ function renderTask({
                 ? ""
                 : `
                 <div class="comment-list" style="display: None;">
-                  ${comments
-                    .map((comment) => {
-                      return `<div class="comment-container" data-comment-id=${
-                        comment.id
-                      }>
-                      <div class="comment-body">
-                        <span class="comment-header status-date sm-mg">${moment(
-                          comment.created
-                        ).format("LLL")}</span>
-                        <div class="comment-text">
-                          ${comment.text}
-                        </div>
-                      </div>
-                      <div class="comment-buttons">
-                        <i class="bi-pencil-square text-button-icon" onclick="editComment(this);"></i>
-                        <i class="bi-x text-button-icon" onclick="deleteComment(this.closest('.comment-container'));" style="color: red;"></i>
-                      </div>
-                      </div>`;
-                    })
-                    .join("")}
-              </div>
-              `
+                  ${comments.map((comment) => renderComment(comment)).join("")}
+              </div>`
             }
           </div>`;
 }
 
-async function makeRequest(url, data) {
-  let method = url === "/get-tasks" ? "get" : "post";
+async function makeRequest(url, method, isValueReturned, data) {
   try {
-    let response = await fetch(
-      url,
-      {
-        method: method,
-        body: data,
-      },
-      false
-    );
-    let responseData = await response.json();
-    console.log(responseData);
-    return responseData;
+    let response = await fetch(url, {
+      method: method,
+      body: data,
+    });
+    if (response.ok) {
+      return isValueReturned ? await response.json() : true;
+    } else {
+      throw new Error(`Server error: ${await response.json()["error"]}`);
+    }
   } catch (error) {
-    console.log(error);
+    alert(error); // change to popup
+    return false;
   }
 }
 
+async function populateTasks() {
+  let data = await makeRequest("/tasks/", "GET", true);
+  let tasks = data.map((task) => renderTask(task)).join("\n");
+  listElem.innerHTML = tasks;
+}
+
 async function deleteComment(commentContainer) {
-  console.log(commentContainer.dataset.commentId);
-  data = await makeRequest(
-    "/delete-comment",
-    commentContainer.dataset.commentId
-  );
-  data ? commentContainer.parentNode.removeChild(commentContainer) : false;
+  let comment_id = commentContainer.dataset.commentId;
+  resp = await makeRequest(`/comments/${comment_id}`, "DELETE", false);
+  resp ? commentContainer.parentNode.removeChild(commentContainer) : false;
+}
+
+async function deleteTask(taskContainer) {
+  let task_id = taskContainer.dataset.id;
+  resp = await makeRequest(`/tasks/${task_id}`, "DELETE", false);
+  resp ? taskContainer.parentNode.removeChild(taskContainer) : false;
 }
 
 async function toggleTaskCompletion(checkbox) {
   let taskContainer = checkbox.closest(".task-container");
-  respData = await makeRequest(
-    "/toggle-task-completion",
-    taskContainer.dataset.id
-  );
-  if (respData && respData.hasOwnProperty("error")) {
-    checkbox.checked = !checkbox.checked;
-  } else {
-    let state = respData
-      ? `(completed - ${moment(respData).format("LLL")})`
-      : "";
+  let task_id = taskContainer.dataset.id;
+  resp = await makeRequest(`/tasks/${task_id}/complete`, "PUT", false);
+  if (resp) {
+    let state = resp ? `(completed - ${moment(respData).format("LLL")})` : "";
     checkbox.closest(".task-container").classList.toggle("completed");
     taskContainer.querySelector(".title + .status-date").innerHTML = state;
+  } else {
+    checkbox.checked = !checkbox.checked;
   }
 }
 
-function populateTasks(data) {
-  let tasks = data.map((task) => renderTask(task)).join("\n");
-  listElem.innerHTML = tasks;
+async function editTask(form) {
+  event.preventDefault();
+  form = new FormData(form);
+  let taskId; // way to get task
+  postId = await makeRequest(`/tasks/${taskId}`, "PUT", false, form);
+  if (postId) {
+    if (!postId.hasOwnProperty("errors")) {
+      // populate task with data from form and id
+      let replacedTask = document.getElementById(`task-${data.id}`);
+      let newTask = new DOMParser()
+        .parseFromString(renderTask(data), "text/html")
+        .getElementById(`task-${taskId}`);
+      replacedTask.replaceWith(newTask);
+      form.replaceWith(cleanForm.cloneNode(true));
+    } else {
+      showFormValidation(data.errors);
+    }
+  }
+}
+
+async function addTask(form) {
+  event.preventDefault();
+  form = new FormData(form);
+  let postId = await makeRequest("/tasks/", "POST", true, form);
+  if (postId) {
+    if (postId.hasOwnProperty("id")) {
+      // populate task with data from form and id
+      listElem.innerHTML = renderTask(data) + listElem.innerHTML;
+      document
+        .getElementById("task-form")
+        .replaceWith(cleanForm.cloneNode(true));
+    } else {
+      showFormValidation(data.errors);
+    }
+  }
+}
+
+function showFormValidation(errors) {
+  for (let field of Object.keys(errors)) {
+    let errorField = document.getElementById(`${field}-validation`);
+    document.getElementById(`${field}`).classList.add("is-invalid");
+    errorField.classList.add("invalid-feedback");
+    errorField.innerHTML = "";
+    for (let error of errors[field]) {
+      errorField += `${error}\n`;
+    }
+  }
+}
+
+function resetForm() {
+  document.getElementById("task-form").replaceWith(cleanForm.cloneNode(true));
+}
+
+function deleteCommentField(commentFieldGroup) {
+  let parent = commentFieldGroup.parentNode;
+  parent.removeChild(commentFieldGroup);
+  let fields = container.querySelectorAll(`div[id*=comment-group]`);
+  let commentNumber = 1;
+  for (field of fields) {
+    field.querySelector("label").innerHTML = `Comment №${commentNumber}`;
+    commentNumber += 1;
+  }
+}
+
+function toggleCommentSection(toggleBtn) {
+  let commentSection = toggleBtn
+    .closest(".task-container")
+    .querySelector(".comment-list");
+  commentSection.style.display = commentSection.style.display ? "" : "none";
+}
+
+function rgbToHex(rgbString) {
+  return (
+    "#" +
+    rgbString
+      .slice(4, rgbString.length - 1)
+      .split(", ")
+      .map((number) => {
+        let hex = Number.parseInt(number).toString(16);
+        return hex.length === 2 ? hex : "0" + hex;
+      })
+      .join("")
+  );
 }
 
 function insertFormWithEditingData(editedTask) {
@@ -179,57 +242,6 @@ function insertFormWithEditingData(editedTask) {
   }
 }
 
-async function editTask(form) {
-  event.preventDefault();
-  data = await makeRequest("/edit-task", new FormData(form));
-  if (!data.hasOwnProperty("errors")) {
-    let replaced = document.getElementById(`task-${data.id}`);
-    let newTask = new DOMParser()
-      .parseFromString(renderTask(data), "text/html")
-      .getElementById(`task-${data.id}`);
-    replaced.replaceWith(newTask);
-    form.replaceWith(cleanForm.cloneNode(true));
-  }
-}
-
-async function deleteTask(taskContainer) {
-  data = await makeRequest("/delete-task", taskContainer.dataset.id);
-  data ? taskContainer.parentNode.removeChild(taskContainer) : false;
-}
-
-async function addTask(form) {
-  event.preventDefault();
-  form = new FormData(form);
-  data = await makeRequest("/add-task", form);
-  if (!data.hasOwnProperty("errors")) {
-    console.log(data);
-    listElem.innerHTML = renderTask(data) + listElem.innerHTML;
-    document.getElementById("task-form").replaceWith(cleanForm.cloneNode(true));
-  } else {
-    showValidation(data.errors);
-  }
-}
-
-function showValidation(errors) {
-  for (let field of Object.keys(errors)) {
-    let errorField = document.getElementById(`${field}-validation`);
-    document.getElementById(`${field}`).classList.add("is-invalid");
-    errorField.classList.add("invalid-feedback");
-    errorField.innerHTML = "";
-    for (let error of errors[field]) {
-      errorField.append(`${error}\n`);
-    }
-  }
-}
-
-function resetForm() {
-  document.getElementById("task-form").replaceWith(cleanForm.cloneNode(true));
-}
-
-async function fillTasks() {
-  let data = await makeRequest("/get-tasks");
-  populateTasks(data);
-}
 function addCommentField(value = "", id) {
   // event.preventDefault();
   let form = document.getElementById("task-form");
@@ -266,114 +278,77 @@ function addCommentField(value = "", id) {
   form.querySelector("fieldset.form-group").append(div);
 }
 
-function deleteCommentField(commentFieldGroup) {
-  event.preventDefault();
-  let id = +commentFieldGroup.id.split("-")[2];
-  let parent = commentFieldGroup.parentNode;
-  parent.removeChild(commentFieldGroup);
-  reiterateFields(parent, id);
-}
-
-function reiterateFields(container, id) {
-  console.log("some");
-  let fields = container.querySelectorAll(`div[id*=comment-group]`);
-  for (field of fields) {
-    let fieldId = field.id.split("-")[2];
-    if (fieldId >= id) {
-      field.id = `comment-group-${id}`;
-      field.querySelector("label").innerHTML = `Comment №${id}`;
-      let hidden = field.querySelector(`input[type=hidden]`);
-      hidden !== null ? (hidden.name = `hidden-${id}`) : false;
-      field.querySelector("input[type=text]").id = `comment-${id}`;
-      field.querySelector("input[type=text]").name = `comment-${id}`;
-      id += 1;
-    }
-  }
-}
-
-function toggleCommentSection(toggleBtn) {
-  let commentSection = toggleBtn
-    .closest(".task-container")
-    .querySelector(".comment-list");
-  console.log(commentSection.style.display);
-  if (commentSection.style.display === "none") {
-    commentSection.style.display = "";
-  } else {
-    commentSection.style.display = "None";
-  }
-}
-
-function rgbToHex(rgbString) {
-  return (
-    "#" +
-    rgbString
-      .slice(4, rgbString.length - 1)
-      .split(", ")
-      .map((number) => {
-        let hex = Number.parseInt(number).toString(16);
-        return hex.length === 2 ? hex : "0" + hex;
-      })
-      .join("")
-  );
-}
-
 async function editComment(elem) {
-  event.preventDefault();
   let commentContainer = elem.closest(".comment-container");
+  let id = commentContainer.dataset.id;
   let input = commentContainer.querySelector("input");
   if (input) {
-    resp = await makeRequest(
-      "/edit-comment",
-      JSON.stringify({
-        id: commentContainer.dataset.commentId,
-        value: input.value,
-      })
-    );
-    if (resp.success) {
-      let div = commentContainer.querySelector(".comment-text");
-      div.textContent = input.value;
-      div.style = "";
-      elem.classList.remove("bi-check2-square");
-      elem.classList.add("bi-pencil-square");
-      let delBtn = elem.parentNode.querySelector("i ~ i");
-      delBtn.classList.remove("bi-arrow-return-left");
-      delBtn.classList.add("bi-x");
-      delBtn.setAttribute("onclick", "cancelCommentEditing(this);");
-      input.remove();
+    resp = await makeRequest(`/comments/${id}`, "PUT", false, input.value);
+    if (resp) {
+      let newContainer = renderComment(
+        {
+          ...commentContainer.dataset,
+          text: input.value,
+        },
+        true
+      );
+      commentContainer.replaceWith(newContainer);
     }
   } else {
-    let comment = elem
-      .closest(".comment-container")
-      .querySelector(".comment-text");
-    comment.style.display = "None";
-    input = document.createElement("input");
-    input.setAttribute("type", "text");
-    input.setAttribute("class", "form-control");
-    comment.parentNode.insertBefore(input, comment);
-    elem.classList.remove("bi-pencil-square");
-    elem.classList.add("bi-check2-square");
-    let cancel = elem.parentNode.querySelector("i ~ i");
-    cancel.classList.remove("bi-x");
-    cancel.classList.add("bi-arrow-return-left");
-    cancel.setAttribute(
-      "onclick",
-      "deleteComment(this.closest('.comment-container'));"
+    let buttons = ["bi-check2-square", "bi-arrow-return-left"];
+    let action = "cancelCommentEditing(this);";
+    let newContainer = renderComment(
+      commentContainer.dataset,
+      true,
+      buttons,
+      action,
+      true
     );
-    input.value = comment.textContent.trim();
-    elem.parentNode.insertBefore(cancel, elem.nextSibling);
+    commentContainer.replaceWith(newContainer);
   }
 }
 
 function cancelCommentEditing(elem) {
-  elem.closest(".comment-container").querySelector("input").remove();
-  elem.closest(".comment-container").querySelector(".comment-text").style = "";
-  elem.classList.remove("bi-arrow-return-left");
-  elem.classList.add("bi-x");
-  let edit = elem.parentNode.querySelector("i");
-  edit.classList.remove("bi-check2-square");
-  edit.classList.add("bi-pencil-square");
-  elem.setAttribute(
-    "onclick",
-    "deleteComment(this.closest('.comment-container'));"
-  );
+  let container = elem.closest(".comment-container");
+  let newContainer = renderComment(container.dataset, true);
+  container.replaceWith(newContainer);
+}
+
+function renderComment(
+  comment,
+  asDOMElement = false,
+  buttonsIcons = ["bi-pencil-square", "bi-x"],
+  action = "deleteComment(this.closest('.comment-container'));",
+  input = false
+) {
+  let commentContainer = `<div class="comment-container" data-id="${
+    comment.id
+  }" data-created="${comment.created}" data-text="${comment.text}">
+<div class="comment-body">
+  <span class="comment-header status-date sm-mg">${moment(
+    comment.created
+  ).format("LLL")}</span>
+  ${
+    input
+      ? `<input class="form-control" type="text" value="${comment.text.trim()}">`
+      : `<div class="comment-text">
+    ${comment.text}
+  </div>`
+  }
+</div>
+<div class="comment-buttons">
+  <i class="${
+    buttonsIcons[0]
+  } text-button-icon" onclick="editComment(this);"></i>
+  <i class="${
+    buttonsIcons[1]
+  } text-button-icon" onclick="${action}" style="color: red;"></i>
+</div>
+</div>`;
+  if (asDOMElement) {
+    return new DOMParser()
+      .parseFromString(commentContainer, "text/html")
+      .querySelector(".comment-container");
+  }
+  return commentContainer;
 }
