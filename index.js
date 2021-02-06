@@ -121,9 +121,9 @@ async function deleteTask(taskContainer) {
 async function toggleTaskCompletion(checkbox) {
   let taskContainer = checkbox.closest(".task-container");
   let task_id = taskContainer.dataset.id;
-  resp = await makeRequest(`/tasks/${task_id}/complete`, "PUT", false);
-  if (resp) {
-    let state = resp ? `(completed - ${moment(respData).format("LLL")})` : "";
+  resp = await makeRequest(`/tasks/${task_id}/complete`, "PUT", true);
+  if (resp !== false) {
+    let state = resp ? `(completed - ${moment(resp).format("LLL")})` : "";
     checkbox.closest(".task-container").classList.toggle("completed");
     taskContainer.querySelector(".title + .status-date").innerHTML = state;
   } else {
@@ -133,11 +133,11 @@ async function toggleTaskCompletion(checkbox) {
 
 async function editTask(form) {
   event.preventDefault();
-  form = new FormData(form);
-  let taskId; // way to get task
-  postId = await makeRequest(`/tasks/${taskId}`, "PUT", false, form);
-  if (postId) {
-    if (!postId.hasOwnProperty("errors")) {
+  let taskId = form.dataset.id; // way to get task
+  sentForm = new FormData(form);
+  data = await makeRequest(`/tasks/${taskId}`, "PUT", true, sentForm);
+  if (data) {
+    if (!data.hasOwnProperty("errors")) {
       // populate task with data from form and id
       let replacedTask = document.getElementById(`task-${data.id}`);
       let newTask = new DOMParser()
@@ -153,10 +153,10 @@ async function editTask(form) {
 
 async function addTask(form) {
   event.preventDefault();
-  form = new FormData(form);
-  let postId = await makeRequest("/tasks/", "POST", true, form);
-  if (postId) {
-    if (postId.hasOwnProperty("id")) {
+  sentForm = new FormData(form);
+  let data = await makeRequest("/tasks/", "POST", true, sentForm);
+  if (data) {
+    if (data.hasOwnProperty("id")) {
       // populate task with data from form and id
       listElem.innerHTML = renderTask(data) + listElem.innerHTML;
       document
@@ -187,7 +187,7 @@ function resetForm() {
 function deleteCommentField(commentFieldGroup) {
   let parent = commentFieldGroup.parentNode;
   parent.removeChild(commentFieldGroup);
-  let fields = container.querySelectorAll(`div[id*=comment-group]`);
+  let fields = parent.querySelectorAll(`.comment-form`);
   let commentNumber = 1;
   for (field of fields) {
     field.querySelector("label").innerHTML = `Comment №${commentNumber}`;
@@ -219,7 +219,7 @@ function rgbToHex(rgbString) {
 function insertFormWithEditingData(editedTask) {
   let newForm = cleanForm.cloneNode(true);
   newForm.setAttribute("onsubmit", "editTask(this)");
-  newForm.id.value = editedTask.dataset.id;
+  newForm.dataset.id = editedTask.dataset.id;
   let date = editedTask.querySelector(".datetime-due").parentNode.dataset.date;
   newForm.title.value = unescape(editedTask.querySelector(".title").innerHTML);
   newForm.datetime_due.value = date.slice(0, date.length - 3);
@@ -229,53 +229,35 @@ function insertFormWithEditingData(editedTask) {
   newForm.submit.value = "Edit";
   newForm.getElementsByTagName("legend")[0].innerHTML = "Edit task";
   document.getElementById("task-form").replaceWith(newForm);
+  newForm.color.value = rgbToHex(editedTask.style.borderColor);
   let comments = editedTask.querySelectorAll(
     ".comment-list .comment-container"
   );
-  console.log(comments);
-  newForm.color.value = rgbToHex(editedTask.style.borderColor);
   for (let comment of comments) {
     let id = comment.dataset.commentId;
-    console.log(id);
     let text = comment.querySelector(".comment-text").textContent.trim();
-    addCommentField(text, id);
+    renderCommentForm({ id, text });
   }
 }
 
-function addCommentField(value = "", id) {
-  // event.preventDefault();
-  let form = document.getElementById("task-form");
-  let commentNumber = 1;
-  while (form.querySelector(`div#comment-group-${commentNumber}`)) {
-    commentNumber += 1;
-  }
-  let div = document.createElement("div");
-  div.setAttribute("class", "mb-3");
-  div.setAttribute("id", `comment-group-${commentNumber}`);
-  if (id) {
-    let hidden = document.createElement("input");
-    hidden.setAttribute("type", "hidden");
-    hidden.setAttribute("name", `hidden-${commentNumber}`);
-    hidden.value = id;
-    div.append(hidden);
-  }
-  let label = document.createElement("label");
-  label.innerHTML = `Comment №${commentNumber}`;
-  label.setAttribute("for", `comment-${commentNumber}`);
-  let deleteBtn = document.createElement("i");
-  deleteBtn.setAttribute("onclick", "deleteCommentField(this.parentNode)");
-  deleteBtn.classList.add("bi-x", "text-button-icon", "sm-icon");
-  deleteBtn.style.color = "red";
-  let comment = document.createElement("input");
-  comment.setAttribute("type", "text");
-  comment.setAttribute("id", `comment-${commentNumber}`);
-  comment.setAttribute("name", `comment-${commentNumber}`);
-  comment.value = value;
-  comment.setAttribute("class", "form-control");
-  div.append(label);
-  div.append(deleteBtn);
-  div.append(comment);
-  form.querySelector("fieldset.form-group").append(div);
+function renderCommentForm(comment) {
+  let fieldset = document.querySelector("#task-form fieldset");
+  let lastCommentNumber = +fieldset
+    .querySelector(".comment-form:last-of-type label")
+    ?.textContent.split("№")[1];
+  let number = lastCommentNumber ? lastCommentNumber + 1 : 1;
+  let field = `<div class="mb-3 comment-form">
+    <label for="comment-">Comment №${number}</label>
+    <i class="bi-x text-button-icon sm-icon" style="color: red;" onclick="deleteCommentField(this.parentNode);"></i>
+    <input type="text" class="form-control" name="comment-${
+      comment?.id || ""
+    }" value="${comment?.text || ""}"/>
+  </div>`;
+  fieldset.append(
+    new DOMParser()
+      .parseFromString(field, "text/html")
+      .querySelector(".comment-form")
+  );
 }
 
 async function editComment(elem) {

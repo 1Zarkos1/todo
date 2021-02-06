@@ -28,11 +28,11 @@
                 {% endfor %}
                 <div class="mb-3">
                     <label for="color">Task color</label>
-                    <input type="color" name="color" id="color" class="" value="#ffffff">
+                    <input type="color" name="color" id="color" value="#ffffff">
                 </div>
                 <div class="mb-3">
                     <label for="comments">Comments:</label>
-                    <i id="comments-addition" class="bi-plus-square text-button-icon sm-icon" onclick="addCommentField();"></i>
+                    <i id="comments-addition" class="bi-plus-square text-button-icon sm-icon" onclick="renderCommentForm();"></i>
                 </div>
             </fieldset>
             <input type="submit" id="submit" value="Create" class="btn btn-primary">

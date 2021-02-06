@@ -83,12 +83,14 @@ def task(task_id):
             form.populate_obj(task)
             task.color = request.form['color']
             task = process_comments(request.form, task)
+            db.session.commit()
+            return task_schema.jsonify(Task.query.get(task_id))
         else:
             return {"errors": form.errors}
     else:
         db.session.query(Task).filter(Task.id == task_id).delete()
-    db.session.commit()
-    return Response(status=204)
+        db.session.commit()
+        return Response(status=204)
 
 
 @app.route('/tasks/', methods=['POST', 'GET'])
@@ -106,12 +108,14 @@ def tasks():
             db.session.add(task)
             task = process_comments(request.form, task)
             db.session.commit()
-            return Response({"id": task_schema.jsonify(task)}, status=201)
+            # return Response({"id": task_schema.jsonify(task)}, status=201)
+            db.session.refresh(task)
+            return task_schema.jsonify(task)
         else:
             return {"errors": form.errors}
 
 
-@app.route('/tasks/<task_id>/complete', methods=['POST'])
+@app.route('/tasks/<task_id>/complete', methods=['PUT'])
 def toggle_task_completion(task_id):
     task = Task.query.get(task_id)
     state = datetime.now() if not task.datetime_completed else None
@@ -137,7 +141,7 @@ def process_comments(form, task):
     sent_ids = set()
     for key in form:
         if key == 'comment-':
-            db.session.add_all([Comment(text=value)
+            db.session.add_all([Comment(text=value, task=task)
                                 for value in form.getlist('comment-')])
         elif key.startswith('comment-'):
             comment_id = int(key.split("-")[1])
