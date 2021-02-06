@@ -20,12 +20,10 @@ def escape_filter(input_value):
 
 
 class TaskForm(FlaskForm):
-    # id = HiddenField('task-id')
     title = StringField('Task', validators=[
                         Required()], filters=(escape_filter,))
     datetime_due = DateTimeLocalField('Due date', format="%Y-%m-%dT%H:%M")
     description = TextAreaField('Description', filters=(escape_filter,))
-    # submit = SubmitField('Create')
 
 
 class Task(db.Model):
@@ -84,7 +82,11 @@ def task(task_id):
             task.color = request.form['color']
             task = process_comments(request.form, task)
             db.session.commit()
-            return task_schema.jsonify(Task.query.get(task_id))
+            task = Task.query.get(task_id)
+            return jsonify({
+                "task": task_id,
+                "comments": [comment.id for comment in task.comments]
+            })
         else:
             return {"errors": form.errors}
     else:
@@ -95,8 +97,6 @@ def task(task_id):
 
 @app.route('/tasks/', methods=['POST', 'GET'])
 def tasks():
-    print(request.form)
-    print(request.form.getlist('name1'))
     if request.method == 'GET':
         return task_schema.jsonify(Task.query.all(), many=True)
     else:
@@ -108,9 +108,11 @@ def tasks():
             db.session.add(task)
             task = process_comments(request.form, task)
             db.session.commit()
-            # return Response({"id": task_schema.jsonify(task)}, status=201)
             db.session.refresh(task)
-            return task_schema.jsonify(task)
+            return jsonify({
+                "task": task.id,
+                "comments": [comment.id for comment in task.comments]
+            })
         else:
             return {"errors": form.errors}
 
@@ -146,7 +148,7 @@ def process_comments(form, task):
         elif key.startswith('comment-'):
             comment_id = int(key.split("-")[1])
             db.session.merge(Comment(id=comment_id,
-                                     text=comment, task_id=task.id))
+                                     text=form[key], task_id=task.id))
             sent_ids.add(comment_id)
     [db.session.delete(comment) for comment in task.comments
         if comment.id not in sent_ids and comment.id is not None]

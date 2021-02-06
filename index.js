@@ -9,8 +9,6 @@ function renderTask({
   color,
   comments,
 }) {
-  console.log(`"${datetime_due}"`);
-  console.log(updated);
   let completed = "";
   if (datetime_completed) {
     completed = "completed";
@@ -39,9 +37,9 @@ function renderTask({
       : ""
   }</span>
                 </div>
-                    <span class="status-date sm-mg" >created - ${moment(
-                      created
-                    ).format("LLL")}</span> | 
+                    <span class="status-date sm-mg" data-created="${created}">created - ${moment(
+    created
+  ).format("LLL")}</span> | 
                     <span class="status-date sm-mg" title='${moment(
                       datetime_due
                     ).format(
@@ -107,7 +105,7 @@ async function populateTasks() {
 }
 
 async function deleteComment(commentContainer) {
-  let comment_id = commentContainer.dataset.commentId;
+  let comment_id = commentContainer.dataset.id;
   resp = await makeRequest(`/comments/${comment_id}`, "DELETE", false);
   resp ? commentContainer.parentNode.removeChild(commentContainer) : false;
 }
@@ -138,10 +136,10 @@ async function editTask(form) {
   data = await makeRequest(`/tasks/${taskId}`, "PUT", true, sentForm);
   if (data) {
     if (!data.hasOwnProperty("errors")) {
-      // populate task with data from form and id
-      let replacedTask = document.getElementById(`task-${data.id}`);
+      let taskObj = getTaskObjFromForm(sentForm, data, taskId);
+      let replacedTask = document.getElementById(`task-${taskId}`);
       let newTask = new DOMParser()
-        .parseFromString(renderTask(data), "text/html")
+        .parseFromString(renderTask(taskObj), "text/html")
         .getElementById(`task-${taskId}`);
       replacedTask.replaceWith(newTask);
       form.replaceWith(cleanForm.cloneNode(true));
@@ -156,9 +154,9 @@ async function addTask(form) {
   sentForm = new FormData(form);
   let data = await makeRequest("/tasks/", "POST", true, sentForm);
   if (data) {
-    if (data.hasOwnProperty("id")) {
-      // populate task with data from form and id
-      listElem.innerHTML = renderTask(data) + listElem.innerHTML;
+    if (data.hasOwnProperty("task")) {
+      let taskObj = getTaskObjFromForm(sentForm, data);
+      listElem.innerHTML = renderTask(taskObj) + listElem.innerHTML;
       document
         .getElementById("task-form")
         .replaceWith(cleanForm.cloneNode(true));
@@ -166,6 +164,38 @@ async function addTask(form) {
       showFormValidation(data.errors);
     }
   }
+}
+
+function getTaskObjFromForm(form, respIds, existingId = null) {
+  let existing =
+    existingId &&
+    document.querySelector(`.task-container[data-id="${existingId}"]`);
+  let now = new Date().toJSON();
+  let taskObj = {
+    comments: [],
+    id: existingId || respIds["task"],
+    created: existing?.querySelector("[data-created]").dataset.created || now,
+    datetime_completed:
+      existing?.querySelector(".task-header .status-date[title]").title || null,
+  };
+  let id, existingComment, commentObj;
+  form.forEach((value, key) => {
+    if (key.startsWith("comment-")) {
+      id = key.split("-")[1];
+      existingComment = existing?.querySelector(
+        `.comment-container[data-id="${id}"]`
+      );
+      commentObj = {
+        id: respIds["comments"].shift(),
+        created: existingComment?.dataset.created || now,
+        text: value,
+      };
+      taskObj.comments.push(commentObj);
+    } else {
+      taskObj[key] = value;
+    }
+  });
+  return taskObj;
 }
 
 function showFormValidation(errors) {
@@ -221,9 +251,12 @@ function insertFormWithEditingData(editedTask) {
   newForm.setAttribute("onsubmit", "editTask(this)");
   newForm.dataset.id = editedTask.dataset.id;
   let date = editedTask.querySelector(".datetime-due").parentNode.dataset.date;
-  newForm.title.value = unescape(editedTask.querySelector(".title").innerHTML);
-  newForm.datetime_due.value = date.slice(0, date.length - 3);
-  newForm.description.value = unescape(
+  newForm.title.value = decodeHtml(
+    editedTask.querySelector(".title").innerHTML
+  );
+  newForm.datetime_due.value =
+    date.length === 19 ? date.slice(0, date.length - 3) : date;
+  newForm.description.value = decodeHtml(
     editedTask.querySelector(".description").innerHTML.trim()
   );
   newForm.submit.value = "Edit";
@@ -234,7 +267,7 @@ function insertFormWithEditingData(editedTask) {
     ".comment-list .comment-container"
   );
   for (let comment of comments) {
-    let id = comment.dataset.commentId;
+    let id = comment.dataset.id;
     let text = comment.querySelector(".comment-text").textContent.trim();
     renderCommentForm({ id, text });
   }
@@ -333,4 +366,10 @@ function renderComment(
       .querySelector(".comment-container");
   }
   return commentContainer;
+}
+
+function decodeHtml(text) {
+  let txt = document.createElement("textarea");
+  txt.innerHTML = text;
+  return txt.value;
 }
