@@ -40,7 +40,15 @@
             <input type="button" value="Reset" class="btn btn-primary" onclick="resetForm();">
         </form>
         <section class="task-section">
-            <h4>Tasks:</h4>
+            <h4>Tasks:</h4><span><input type="checkbox" name="check" id="status" onchange="populateTasks()"> Active only</span>
+            <select name="" id="sort" onchange='populateTasks();' style="margin-left: 1rem;">
+                <option value="created.desc" selected>Date created (newer first)</option>
+                <option value="created.asc">Date created (newer last)</option>
+                <option value="due.desc">Date due (newer first)</option>
+                <option value="due.asc">Date due (newer last)</option>
+                <option value="comp.desc">Date completed (newer first)</option>
+                <option value="comp.asc">Date completed (newer last)</option>
+            </select>
             <div id="task-list-container">
             </div>
         </section>

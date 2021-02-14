@@ -4,6 +4,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_marshmallow import Marshmallow
 from flask_wtf import FlaskForm
 from flask_migrate import Migrate
+from sqlalchemy import asc, desc
 from wtforms import StringField, TextField, SubmitField, TextAreaField, HiddenField
 from wtforms.validators import Required
 from wtforms.fields.html5 import DateTimeLocalField
@@ -47,6 +48,11 @@ class Comment(db.Model):
     task_id = db.Column(db.Integer, db.ForeignKey('task.id'))
     text = db.Column(db.String, nullable=False)
     created = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+sort_order = {'asc': asc, 'desc': desc}
+sort_column = {'due': Task.datetime_due,
+               'comp': Task.datetime_completed, 'created': Task.created}
 
 
 class TaskSchema(ma.SQLAlchemyAutoSchema):
@@ -98,7 +104,14 @@ def task(task_id):
 @app.route('/tasks/', methods=['POST', 'GET'])
 def tasks():
     if request.method == 'GET':
-        return task_schema.jsonify(Task.query.all(), many=True)
+        task = Task.query
+        status = request.args.get('status')
+        column, order = request.args.get(
+            'sort', default='created.desc').split('.')
+        task = task.filter(Task.datetime_completed ==
+                           None, Task.datetime_due > datetime.utcnow()) if status else task
+        task = task.order_by(sort_order.get(order)(sort_column.get(column)))
+        return task_schema.jsonify(task.all(), many=True)
     else:
         form = TaskForm()
         task = Task()
@@ -126,8 +139,17 @@ def toggle_task_completion(task_id):
     return jsonify(state.isoformat() if state else None)
 
 
+@app.route('/comments/', methods=['POST'])
+def comments():
+    data = json.loads(request.data.decode('utf-8'))
+    comment = Comment(text=data['text'], task_id=data["taskId"])
+    db.session.add(comment)
+    db.session.commit()
+    return jsonify({"id": comment.id})
+
+
 @app.route('/comments/<int:comment_id>', methods=['PUT', 'DELETE'])
-def comments(comment_id):
+def comment(comment_id):
     if request.method == 'DELETE':
         delt = db.session.query(Comment).filter(
             Comment.id == comment_id).delete()

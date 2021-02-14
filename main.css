@@ -102,3 +102,11 @@ body {
 .failed {
   background-color: #fd5b5b49;
 }
+
+.add-comment i {
+  font-size: 1rem;
+}
+
+.add-comment {
+  margin-left: 1rem;
+}

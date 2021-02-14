@@ -35,7 +35,7 @@ function renderTask({
     datetime_completed
       ? `(completed - ${moment(datetime_completed).format("LLL")})`
       : ""
-  }</span>
+  }</span><span class="add-comment" onclick="addInlineComment(this.closest('.task-container'))"><i class="bi-chat-square-text text-button-icon"></i><i class="bi-plus text-button-icon"></i></span>
                 </div>
                     <span class="status-date sm-mg" data-created="${created}">created - ${moment(
     created
@@ -64,9 +64,7 @@ function renderTask({
                 ${
                   comments.length === 0
                     ? ""
-                    : `<div class="comments-toggle">
-                    <i class="bi-chat-square-text text-button-icon" onclick="toggleCommentSection(this)"></i>
-                    </div>`
+                    : `<i class="bi-chat-square-text text-button-icon comments-toggle" onclick="toggleCommentSection(this)"></i>`
                 }
               </div>
             </div>
@@ -99,15 +97,26 @@ async function makeRequest(url, method, isValueReturned, data) {
 }
 
 async function populateTasks() {
-  let data = await makeRequest("/tasks/", "GET", true);
+  let options = document.getElementById("status").checked
+    ? "&status=active"
+    : "";
+  let sort = document.getElementById("sort").value;
+  let data = await makeRequest(`/tasks/?sort=${sort}${options}`, "GET", true);
   let tasks = data.map((task) => renderTask(task)).join("\n");
   listElem.innerHTML = tasks;
 }
 
-async function deleteComment(commentContainer) {
+async function deleteComment(commentContainer, existing = true) {
+  let parent = commentContainer.parentNode;
   let comment_id = commentContainer.dataset.id;
-  resp = await makeRequest(`/comments/${comment_id}`, "DELETE", false);
-  resp ? commentContainer.parentNode.removeChild(commentContainer) : false;
+  if (existing) {
+    resp = await makeRequest(`/comments/${comment_id}`, "DELETE", false);
+    if (!parent.querySelector(".comment-container")) {
+      let buttons = parent.parentNode.querySelector(".task-buttons");
+      buttons.removeChild(buttons.querySelector(".comments-toggle"));
+    }
+  }
+  !existing || resp ? parent.removeChild(commentContainer) : false;
 }
 
 async function deleteTask(taskContainer) {
@@ -334,27 +343,28 @@ function renderComment(
   asDOMElement = false,
   buttonsIcons = ["bi-pencil-square", "bi-x"],
   action = "deleteComment(this.closest('.comment-container'));",
-  input = false
+  input = false,
+  secAction = "editComment(this);"
 ) {
   let commentContainer = `<div class="comment-container" data-id="${
     comment.id
   }" data-created="${comment.created}" data-text="${comment.text}">
 <div class="comment-body">
-  <span class="comment-header status-date sm-mg">${moment(
-    comment.created
-  ).format("LLL")}</span>
+  <span class="comment-header status-date sm-mg">${
+    comment.created ? moment(comment.created).format("LLL") : "Add comment:"
+  }</span>
   ${
     input
-      ? `<input class="form-control" type="text" value="${comment.text.trim()}">`
+      ? `<input class="form-control" type="text" value="${
+          comment.text?.trim() || ""
+        }">`
       : `<div class="comment-text">
     ${comment.text}
   </div>`
   }
 </div>
 <div class="comment-buttons">
-  <i class="${
-    buttonsIcons[0]
-  } text-button-icon" onclick="editComment(this);"></i>
+  <i class="${buttonsIcons[0]} text-button-icon" onclick="${secAction}"></i>
   <i class="${
     buttonsIcons[1]
   } text-button-icon" onclick="${action}" style="color: red;"></i>
@@ -366,6 +376,58 @@ function renderComment(
       .querySelector(".comment-container");
   }
   return commentContainer;
+}
+
+function addInlineComment(taskContainer) {
+  let commentList = taskContainer.querySelector(".comment-list");
+  if (!commentList) {
+    commentList = document.createElement("div");
+    commentList.setAttribute("class", "comment-list");
+    taskContainer.append(commentList);
+  }
+  let comment = renderComment(
+    {},
+    true,
+    ["bi-check2-square", "bi-x"],
+    "deleteComment(this.closest('.comment-container'), false);",
+    true,
+    "confirmCommentAdd(this.closest('.comment-container'))"
+  );
+  commentList.append(comment);
+}
+
+async function confirmCommentAdd(commentContainer) {
+  let text = commentContainer.querySelector("input").value;
+  let data = {
+    text,
+    taskId: commentContainer.closest(".task-container").dataset.id,
+  };
+  console.log(data);
+  resp = await makeRequest(`/comments/`, "POST", true, JSON.stringify(data));
+  if (resp) {
+    let newContainer = renderComment(
+      {
+        id: resp.id,
+        created: new Date().toJSON(),
+        text,
+      },
+      true
+    );
+    commentContainer.replaceWith(newContainer);
+    let taskButtons = newContainer
+      .closest(".task-container")
+      .querySelector(".task-buttons");
+    let commentButton = taskButtons.querySelector(".comment-toggle");
+    if (!commentButton) {
+      commentButton = document.createElement("i");
+      commentButton.setAttribute(
+        "class",
+        "bi-chat-square-text text-button-icon comments-toggle"
+      );
+      commentButton.setAttribute("onclick", "toggleCommentSection(this)");
+      taskButtons.append(commentButton);
+    }
+  }
 }
 
 function decodeHtml(text) {
